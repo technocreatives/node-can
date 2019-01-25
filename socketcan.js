@@ -178,12 +178,13 @@ Signal.prototype.update = function(newValue) {
     }
 
     // Nothing changed
-    if (!changed) return;
+    if (!changed) return 0;
 
     // Update all changelisteners, that the signal changed
     for (f in this.changelisteners) {
         this.changelisteners[f](this);
     }
+    return 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -262,6 +263,63 @@ function Message(desc)
             this.signals[s.name] = new Signal(s);
         }
     }
+    this.updateListeners = [];
+    this.changeListeners = [];
+}
+
+/**
+ * Keep track of listeners who want to be notified if this message updates
+ * @method onUpdate
+ * @param listener JS callback to get notification
+ * @for Message
+ */
+Message.prototype.onUpdate = function(listener) {
+	this.updateListeners.push(listener);
+	return listener;
+}
+
+/**
+ * Keep track of listeners who want to be notified if this message changes
+ * @method onChange
+ * @param listener JS callback to get notification
+ * @for Message
+ */
+Message.prototype.onChange = function(listener) {
+	this.changeListeners.push(listener);
+	return listener;
+}
+
+/**
+ * Remove listener from message onChange and/or onUpdate
+ * @method removeListener
+ * @param listener to be removed
+ * @for Message
+ */
+Message.prototype.removeListener = function(listener) {
+	var idx = this.changelisteners.indexOf(listener);
+	if (idx >= 0) this.changelisteners.splice(idx, 1);
+	idx = this.updateListeners.indexOf(listener);
+	if (idx >= 0) this.updateListeners.splice(idx, 1);
+}
+
+/**
+ * Any local registered clients will receive a notification. 
+ * It indicates that all signals within a message have been updated.
+ * @method hasUpdated
+ * @for Message
+ */
+Message.prototype.hasUpdated = function(changed) {
+	
+	// Update all updateListeners, that the message is fully updated
+	for (f in this.updateListeners) {
+		this.updateListeners[f](this);
+	}
+	if (!changed) {
+		return
+    }
+	for (f in this.changeListeners) {                
+		this.changeListeners[f](this);
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -319,6 +377,8 @@ DatabaseService.prototype.onMessage = function (msg) {
         var mux_count = b_mux[0] + (b_mux[1] << 32)
     }
 
+    // count how many signals change inside a message
+	var counter = 0
     // Let the C-Portition extract and convert the signal
     for (i in m.signals) {
         var s = m.signals[i];
@@ -342,8 +402,11 @@ DatabaseService.prototype.onMessage = function (msg) {
         if (s.intercept)
             val += s.intercept;
 
-        s.update(val);
+        counter += s.update(val);
     }
+    
+    const changed = counter > 0;
+	m.hasUpdated(changed);
 }
 
 /**
