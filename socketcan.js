@@ -395,8 +395,7 @@ DatabaseService.prototype.send = function (msg_name) {
         if (s.slope)
             val /= s.slope;
 
-        if (typeof(val) == 'double')
-            val = parseInt(Math.round(val));
+        val = Math.round(val);
 
         if (m.len == 0) {
             return;
